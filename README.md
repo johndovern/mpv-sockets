@@ -222,6 +222,26 @@ Run `mpv-toggle` to toggle the most recently toggled instance of mpv. This tries
 
 `-s, --socket` toggle the given socket. No prompt is shown.
 
+## Environment Variables
+The following environment variables are used by the scripts in this repo.
+
+You can set any of these in you `.bashrc` or `.zprofile` or however you normally set your environment variables.
+
+### `$MPV_SOCKET_DIR`
+If unset this will default to `/tmp/mpvSockets`
+
+This should be set to a directory that you have full permission to access and write to.
+
+### `$MPV_MUSIC_SOCKET`
+If unset this will default to `${MPV_SOCKET_DIR}/mpv_music`. If your `$MPV_SOCKET_DIR` variable is unset the default path will be `/tmp/mpvSockets`
+
+When set this should be the full path to the location where you want your mpv-music socket to be located.
+
+### `$MPV_SOCKET_DIR`
+If unset this will default to `${MPV_SOCKET_DIR}/umpv_socket`. If your `$MPV_SOCKET_DIR` variable is unset the default path will be `/tmp/mpvSockets`
+
+When set this should be the full path to the location where you want your umpv socket to be located.
+
 ## Install
 
 Dependencies: [`mpv`](https://mpv.io/), [`socat`](https://linux.die.net/man/1/socat), [`jq`](https://github.com/stedolan/jq), `sed`, ([dmenu](https://tools.suckless.org/dmenu/) or [`fzf`](https://github.com/junegunn/fzf) for `mpv-next`, `mpv-prev`, `mpv-quit`, and `mpv-toggle`)
