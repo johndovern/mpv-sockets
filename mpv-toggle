@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# keeps track of which sockets were recently
+# paused by this script
+#
+# if that socket can be resumed, does that
+# else, tries to look for another paused
+# mpv instance and resumes that
+
+readonly LAST_PLAYING="/tmp/mpv-recently-paused"
+LP_LOCATION="$(readlink "${LAST_PLAYING}")"
+export MOST_RECENT=
+declare -a MANUAL_SOCKET
+export MUSIC_SOCKET="${MPV_MUSIC_SOCKET:-${MPV_SOCKET_DIR:-/tmp/mpvSockets}/music_socket}"
+export UMPV_SOCKET="${MPV_UMPV_SOCKET:-${MPV_SOCKET_DIR:-/tmp/mpvSockets}/umpv_socket}"
+declare -a CURRENTLY_PLAYING ALL_SOCKETS
+
+get_opts() {
+  while :; do
+    if [[ "$#" -gt 0 ]]; then
+      case "${1}" in
+        -f|--fzf)
+          FZF="--fzf"
+          ;;
+        -m|--music)
+          MANUAL_SOCKET+=("${MUSIC_SOCKET}")
+          shift
+          ;;
+        -s|--socket)
+          shift
+          case "${1:-NO_SOCKET}" in
+            NO_SOCKET)
+              echo "USAGE: --socket needs a socket"
+              return 1
+              ;;
+            *)
+              for SOCKET in "$@" ; do
+                MANUAL_SOCKET+=("${SOCKET}")
+                shift
+              done
+              unset SOCKET
+              break
+              ;;
+          esac
+          ;;
+        -u|--umpv)
+          MANUAL_SOCKET+=("${UMPV_SOCKET}")
+          shift
+          ;;
+        *)
+          ;;
+      esac
+    else
+      break
+    fi
+  done
+}
+
+manual_toggle() {
+  toggle "${1}" && \
+  rm -f "${LAST_PLAYING}" && \
+  ln -s "${1}" "${LAST_PLAYING}"
+}
+
+smart_toggle() {
+  if mpv-currently-playing --socket >/dev/null 2>&1; then
+    while read -r SOCKET ; do
+      CURRENTLY_PLAYING+=("${SOCKET}")
+    done < <(mpv-currently-playing --socket)
+
+    rm -f "${LAST_PLAYING}"
+    MOST_RECENT="${CURRENTLY_PLAYING[-1]}"
+    echo "Pausing ${MOST_RECENT}..."
+    toggle "${MOST_RECENT}" || exit $?
+    ln -s "${MOST_RECENT}" "${LAST_PLAYING}"
+  else
+    if [[ -e "${LP_LOCATION}" ]]; then
+      echo "Found recently paused socket, resuming..."
+      toggle "${LAST_PLAYING}"
+    else
+      echo "Last paused socket no longer exists, checking for active instance..." >&2
+      if mpv-active-sockets >/dev/null 2>&1 ; then
+        echo "Starting mpv instance of choice..."
+        if toggle "$(mpv-pick ${FZF})" ; then
+          echo 'Success!'
+        else
+          echo "Failed..." >&2
+          exit 1
+        fi
+      else
+        echo -e "No active mpv instances...\nExiting" >&2
+        exit 1
+      fi
+    fi
+  fi
+}
+
+toggle() {
+  mpv-communicate "$1" 'cycle pause'
+  mpv-communicate "$1" '{ "command": ["script-binding", "dwmblocks/update-dwmblocks"] }'
+  return $?
+}
+
+main() {
+  get_opts "$@" || return 1
+  if [[ "${#MANUAL_SOCKET[@]}" -gt 0 ]]; then
+    for SOCKET in "${MANUAL_SOCKET[@]}"; do
+      echo "pausing ${SOCKET}"
+      manual_toggle "${SOCKET}"
+    done
+  else
+    smart_toggle
+  fi
+}
+
+main "$@" && exit 0 || exit 1

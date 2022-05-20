@@ -4,27 +4,154 @@
 
 set -e
 
+declare -a ACTIVE
+export CHOSEN
+export UMPV_SOCKET="${MPV_UMPV_SOCKET:-${MPV_SOCKET_DIR:-/tmp/mpvSockets}/umpv_socket}"
+export MUSIC_SOCKET="${MPV_MUSIC_SOCKET:-${MPV_SOCKET_DIR:-/tmp/mpvSockets}/music_socket}"
+export INSTANCE_COUNT
+export INTERACT=1
+INSTANCE_COUNT="$(mpv-active-sockets | wc -l)"
+
 abort() {
-	echo "$1" >&2
-	exit 1
+  echo "$1" >&2
 }
 
-declare -a active
-declare chosen
+get_opts() {
+  while :; do
+    if [[ "$#" -gt 0 ]]; then
+      case "$1" in
+        -f|--fzf)
+          INTERACT=0
+          shift
+          ;;
+        -F|--full)
+          FULL=1
+          shift
+          ;;
+        -m|--music)
+          NO_MUSIC=1
+          shift
+          ;;
+        -u|--umpv)
+          NO_UMPV=1
+          shift
+          ;;
+        -U|--unique)
+          NO_CUSTOM=1
+          shift
+          ;;
+        --)
+          shift
+          break
+          ;;
+        *)
+          abort "Invalid option(s): $*"
+          return 1
+          ;;
+      esac
+    else
+      break
+    fi
+  done
+}
 
-# shellcheck disable=SC2207
-if active=($(mpv-active-sockets)); then
-	chosen="$({
-		for socket in "${active[@]}"; do
-			printf '%s:' "${socket}"
-			mpv-get-property "${socket}" 'path' || exit $?
-		done
-	} | fzf +m -i --prompt='Select mpv instance... > ')" || abort 'No instance selected...'
-	if [[ -n "${chosen}" ]]; then
-		echo "${chosen%%:*}"
-	else
-		abort 'Error getting selected instance...'
-	fi
-else
-	abort 'No active mpv instances...'
-fi
+is_ignored() {
+  if [[ "${NO_CUSTOM}" -eq 1 ]]; then
+    case "${1}" in
+      ${UMPV_SOCKET}|${MUSIC_SOCKET})
+        return 0
+        ;;
+      *)
+        return 1
+        ;;
+    esac
+  elif [[ "${NO_UMPV}" -eq 1 ]]; then
+    case "${1}" in
+      ${UMPV_SOCKET})
+        return 0
+        ;;
+      *)
+        return 1
+        ;;
+    esac
+  elif [[ "${NO_MUSIC}" -eq 1 ]]; then
+    case "${1}" in
+      ${MUSIC_SOCKET})
+        return 0
+        ;;
+      *)
+        return 1
+        ;;
+    esac
+  else
+    return 1
+  fi
+}
+
+get_sockets() {
+    while read -r SOCKET ; do
+    if is_ignored "${SOCKET}" ; then
+      continue
+    else
+      ACTIVE+=("${SOCKET}")
+    fi
+  done < <(mpv-active-sockets)
+}
+
+print_sockets() {
+  for SOCKET in "${ACTIVE[@]}"; do
+    printf '%s:' "${SOCKET}"
+    mpv-get-property "${SOCKET}" 'media-title' || exit $?
+  done
+}
+
+print_active() {
+  CHOSEN="$(print_sockets)"
+  if [[ "${FULL}" -eq 1 ]]; then
+    echo "${CHOSEN}"
+    return 0
+  else
+    echo "${CHOSEN%%:*}"
+    return 0
+  fi
+}
+
+select_instance() {
+  if [[ "${INTERACT}" -eq 1 ]]; then
+    if ! CHOSEN="$(print_sockets | dmenu -i -l 10 -p "Select:")" ; then
+      abort 'No instance selected...'
+      return 1
+    fi
+  elif [[ "${INTERACT}" -eq 0 ]]; then
+    if ! CHOSEN="$(print_sockets | fzf +m -i --prompt='Select mpv instance... > ')" ; then
+      abort 'No instance selected...'
+      return 1
+    fi
+  fi
+
+  if [[ -n "${CHOSEN}" ]]; then
+    if [[ "${FULL}" -eq 1 ]]; then
+      echo "${CHOSEN}"
+    else
+      echo "${CHOSEN%%:*}"
+    fi
+  else
+    abort "Error getting selected instance..."
+    return 1
+  fi
+}
+
+main() {
+  get_opts "$@" || return 1
+  get_sockets
+  if [[ "${#ACTIVE[@]}" -eq 1 ]]; then
+    print_active
+  elif [[ "${#ACTIVE[@]}" -eq 0 ]]; then
+    abort "No active mpv instances..."
+    return 1
+  else
+    select_instance || return 1
+  fi
+}
+
+main "$@" && exit 0 || exit 1

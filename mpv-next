@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# go to the next song in the playlist for the currently PLAYING mpv instance
+
+IFS=$'\n'
+declare -a PLAYING
+
+# shellcheck disable=SC2207
+if PLAYING=($(mpv-currently-playing --socket)); then
+  while :; do
+    if [[ "$#" -gt 0 ]]; then
+      case "${1}" in
+        -f|--fzf)
+          FZF="--fzf"
+          shift
+          ;;
+        -m|--music)
+          mpv-communicate --music '{ "command": ["playlist-next"] }'
+          exit
+          ;;
+        -p|--pick)
+          mpv-communicate "$(mpv-pick ${FZF})" '{ "command": ["playlist-next"] }'
+          exit
+          ;;
+        -u|--umpv)
+          mpv-communicate --umpv '{ "command": ["playlist-next"] }'
+          exit
+          ;;
+        -s|--socket)
+          shift
+          case "${1:-NO_SOCKET}" in
+            NO_SOCKET)
+              echo "USAGE: --socket needs a socket"
+              exit 1
+              ;;
+            *)
+              mpv-communicate "${1}" '{ "command": ["playlist-next"] }'
+              shift
+              exit
+              ;;
+          esac
+          ;;
+        *)
+          echo "Unrecognized option(s): $@..." >&2
+          exit 1
+          ;;
+      esac
+    else
+      mpv-communicate "${PLAYING[-1]}" '{ "command": ["playlist-next"] }'
+      break
+    fi
+  done
+else
+  echo 'No mpv instances which are currently PLAYING media...' >&2
+  exit 1
+fi

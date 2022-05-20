@@ -15,9 +15,9 @@ set -o pipefail
 
 IFS=$'\n'
 
-declare -a playing
+declare -a PLAYING
 
-if ! playing=($(mpv-currently-playing --socket)); then
+if ! PLAYING=($(mpv-currently-playing --socket)); then
 	echo 'No mpv instances which are currently playing media...' >&2
 	exit 1
 fi
@@ -26,11 +26,11 @@ fi
 # https://unix.stackexchange.com/questions/26784/understanding-ifs
 unset IFS
 
-declare metadata
+declare METADATA
 
-metadata="$(mpv-get-property "${playing[-1]}" 'metadata')"
+METADATA="$(mpv-get-property "${PLAYING[-1]}" 'metadata')"
 [[ -n "$MPV_DESC_RAW" ]] && {
-	printf '%s\n' "${metadata}"
+	printf '%s\n' "${METADATA}"
 	exit 0
 }
 
@@ -38,7 +38,7 @@ declare TITLE ARTIST ALBUM DESCRIPTION
 
 fetch_attr_or_empty() {
 	# jq the key out default to empty space, remove newlines and spaces from end of field
-	jq --arg FIELD "$1" '.[$FIELD]//""' -r <<<"${metadata}" | sed -e 's/\n/ /g; s/\s*$//g'
+	jq --arg FIELD "$1" '.[$FIELD]//""' -r <<<"${METADATA}" | sed -e 's/\n/ /g; s/\s*$//g'
 }
 
 TITLE="$(fetch_attr_or_empty title)"

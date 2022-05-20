@@ -2,15 +2,54 @@
 # seek forward/backward in the current song
 
 IFS=$'\n'
-declare -a playing
+declare -a PLAYING
+mpv_seek() {
+  mpv-communicate "${1}" "$(printf '{ "command": ["seek", "%d"] }' "${SEEK_SECONDS}")"
+}
 
 # use first argument as number of seconds to skip; default to 5 seconds forwards
-SEEK_SECONDS="${1:-5}"
+[[ "${1}" =~ [0-9] ]] && SEEK_SECONDS="${1}"
+[[ "${2}" =~ [0-9] ]] && SEEK_SECONDS="${2}"
+[[ -z "${SEEK_SECONDS}" ]] && SEEK_SECONDS=5
 
-# shellcheck disable=SC2207
-if playing=($(mpv-currently-playing --socket)); then
-	exec mpv-communicate "${playing[-1]}" "$(printf '{ "command": ["seek", "%d"] }' "$SEEK_SECONDS")"
+if [[ "$#" -gt 0 ]]; then
+  case "${1}" in
+    -f|--fzf)
+      FZF="--fzf"
+      shift
+      ;;
+    -l|--latest)
+      IFS=$'\n'
+      shift
+      if PLAYING=($(mpv-currently-playing --unique --socket)); then
+        mpv_seek "${PLAYING[-1]}"
+        exit
+      else
+        notify-send "No mpv instances which are currently playing media..." >&2
+        exit 1
+      fi
+      ;;
+    -m|--music)
+      mpv_seek "${MPV_MUSIC_SOCKET:-${MPV_SOCKET_DIR:-/tmp/mpvSockets}/music_socket}"
+      exit
+      ;;
+    -u|--umpv)
+      mpv_seek "${MPV_UMPV_SOCKET:-${MPV_SOCKET_DIR:-/tmp/mpvSockets}/umpv_socket}"
+      exit
+      ;;
+    -s|--socket)
+      shift
+      mpv_seek "${1}"
+      exit
+      ;;
+  esac
+fi
+
+declare CHOSEN
+
+if CHOSEN="$(mpv-pick ${FZF})"; then
+  mpv_seek "${CHOSEN}"
+  exit
 else
-	echo "No mpv instances which are currently playing media..." >&2
-	exit 1
+  exit 1
 fi

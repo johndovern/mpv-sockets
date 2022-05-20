@@ -5,13 +5,13 @@
 
 SOCKET="${1:?Must provide socket as first argument}"
 if [[ -e "${SOCKET}" ]]; then
-	if [[ ! -S "${SOCKET}" ]]; then
-		echo "Path is not a socket: ${SOCKET}" >&2
-		exit 2
-	fi
+  if [[ ! -S "${SOCKET}" ]]; then
+    echo "Path is not a socket: ${SOCKET}" >&2
+    exit 2
+  fi
 else
-	echo "Path doesn't exist: ${SOCKET}" >&2
-	exit 2
+  echo "Path doesn't exist: ${SOCKET}" >&2
+  exit 2
 fi
 PROPERTY="${2:?Must provide property as second argument}"
 readonly SOCKET PROPERTY
@@ -23,11 +23,11 @@ MPV_RESP="$(printf '{ "command": ["get_property", "%s" ] }\n' "${PROPERTY}" | so
 # select (filter) and extract data if it succeeded
 DATA="$(jq -r 'select(.error == "success") | .data' <<<"$MPV_RESP")"
 if [[ -z "$DATA" ]]; then
-	# was empty, so extract/dump error
-	err="$(echo "${MPV_RESP}" | jq -r '.error')"
-	echo -e "Error: ${err}\nResponse:" >&2
-	jq <<<"${MPV_RESP}" >&2
-	exit 1
+  # was empty, so extract/dump error
+  err="$(echo "${MPV_RESP}" | jq -r '.error')"
+  echo -e "Error: ${err}\nResponse:" >&2
+  jq <<<"${MPV_RESP}" >&2
+  exit 1
 fi
 # data wasn't empty; succeeded
 echo "${DATA}"

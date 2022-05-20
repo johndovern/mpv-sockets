@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# interactively pick one of the active mpv instances,
+# and send it a 'quit' command
+
+mpv_quit() {
+  mpv-communicate "${1}" 'quit'
+}
+
+if [[ "$#" -gt 0 ]]; then
+  case "${1}" in
+    -f|--fzf)
+      FZF="--fzf"
+      ;;
+    -l|--latest)
+      IFS=$'\n'
+      shift
+      if PLAYING=($(mpv-currently-playing --unique --socket)); then
+        mpv_quit "${PLAYING[-1]}"
+        exit
+      else
+        notify-send "No mpv instances which are currently playing media..." >&2
+        exit 1
+      fi
+      ;;
+    -m|--music)
+      mpv_quit "${MPV_MUSIC_SOCKET:-${MPV_SOCKET_DIR:-/tmp/mpvSockets}/music_socket}"
+      exit
+      ;;
+    -u|--umpv)
+      mpv_quit "${MPV_UMPV_SOCKET:-${MPV_SOCKET_DIR:-/tmp/mpvSockets}/umpv_socket}"
+      exit
+      ;;
+    -s|--socket)
+      shift
+      mpv_quit "${1}"
+      exit
+      ;;
+    *)
+      ;;
+  esac
+fi
+
+set -e
+
+declare CHOSEN
+
+if CHOSEN="$(mpv-pick ${FZF})"; then
+  mpv_quit "${CHOSEN}"
+  exit
+else
+  exit 1
+fi
