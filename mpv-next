@@ -21,10 +21,6 @@ if PLAYING=($(mpv-currently-playing --socket)); then
           mpv-communicate "$(mpv-pick ${FZF})" '{ "command": ["playlist-next"] }'
           exit
           ;;
-        -u|--umpv)
-          mpv-communicate --umpv '{ "command": ["playlist-next"] }'
-          exit
-          ;;
         -s|--socket)
           shift
           case "${1:-NO_SOCKET}" in
@@ -38,6 +34,10 @@ if PLAYING=($(mpv-currently-playing --socket)); then
               exit
               ;;
           esac
+          ;;
+        -u|--umpv)
+          mpv-communicate --umpv '{ "command": ["playlist-next"] }'
+          exit
           ;;
         *)
           echo "Unrecognized option(s): $@..." >&2
