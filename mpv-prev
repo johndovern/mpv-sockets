@@ -18,7 +18,7 @@ if PLAYING=($(mpv-currently-playing --socket)); then
           exit
           ;;
         -p|--pick)
-          mpv-communicate "$(mpv-pick ${FZF})" '{ "command": ["playlist-next"] }'
+          mpv-communicate "$(mpv-pick ${FZF})" '{ "command": ["playlist-prev"] }'
           exit
           ;;
         -s|--socket)
