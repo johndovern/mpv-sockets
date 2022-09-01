@@ -13,6 +13,7 @@ export INTERACT=1
 INSTANCE_COUNT="$(mpv-active-sockets | wc -l)"
 
 abort() {
+  [[ "$QUIET" -eq 1 ]] && return 0
   echo "$1" >&2
 }
 
@@ -30,6 +31,14 @@ get_opts() {
           ;;
         -m|--music)
           NO_MUSIC=1
+          shift
+          ;;
+        -p|--pid)
+          PID=1
+          shift
+          ;;
+        -q|--quiet)
+          QUIET=1
           shift
           ;;
         -u|--umpv)
@@ -57,50 +66,30 @@ get_opts() {
 
 is_ignored() {
   if [[ "${NO_CUSTOM}" -eq 1 ]]; then
-    case "${1}" in
-      ${UMPV_SOCKET}|${MUSIC_SOCKET})
-        return 0
-        ;;
-      *)
-        return 1
-        ;;
-    esac
+    [[ "${UMPV_SOCKET} ${MUSIC_SOCKET}" =~ "${1}" ]] && return 0
+    return 1
   elif [[ "${NO_UMPV}" -eq 1 ]]; then
-    case "${1}" in
-      ${UMPV_SOCKET})
-        return 0
-        ;;
-      *)
-        return 1
-        ;;
-    esac
+    [[ "${UMPV_SOCKET}" =~ "${1}" ]] && return 0
+    return 1
   elif [[ "${NO_MUSIC}" -eq 1 ]]; then
-    case "${1}" in
-      ${MUSIC_SOCKET})
-        return 0
-        ;;
-      *)
-        return 1
-        ;;
-    esac
+    [[ "${MUSIC_SOCKET}" =~ "${1}" ]] && return 0
+    return 1
   else
     return 1
   fi
 }
 
 get_sockets() {
-    while read -r SOCKET ; do
-    if is_ignored "${SOCKET}" ; then
-      continue
-    else
-      ACTIVE+=("${SOCKET}")
-    fi
+  while read -r SOCKET ; do
+    is_ignored "${SOCKET}" && continue
+    ACTIVE+=("${SOCKET}")
   done < <(mpv-active-sockets)
 }
 
 print_sockets() {
   for SOCKET in "${ACTIVE[@]}"; do
-    printf '%s:' "${SOCKET}"
+    [[ "${PID}" -ne 1 ]] && printf '%s:' "${SOCKET}"
+    [[ "${PID}" -eq 1 ]] && printf '%s:' "$(mpv-get-property "${SOCKET}" 'pid')"
     mpv-get-property "${SOCKET}" 'media-title' || exit $?
   done
 }

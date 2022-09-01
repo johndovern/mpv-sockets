@@ -32,6 +32,10 @@ get_opts() {
         MUSIC=1
         shift
         ;;
+      -q|--quiet)
+        QUIET=1
+        shift
+        ;;
       -s|--socket)
         PRINT_SOCKET=1
         shift
@@ -126,41 +130,15 @@ get_playing() {
 }
 
 check_results() {
-  case "${#RESULT[@]}" in
-    0)
-      return 1
-      ;;
-    *)
-      case "${1:-NO_PRINT}" in
-        "NO_PRINT")
-          return 0
-          ;;
-        -p)
-          printf '%s\n' "${RESULT[@]}"
-          return 0
-          ;;
-        *)
-          printf 'Bad option: %s\n' "$1"
-          return 1
-          ;;
-      esac
-      ;;
-  esac
+  [[ "${#RESULT[@]}" -eq 0 ]] && return 1
+  [[ "$QUIET" -ne 1 ]] && printf '%s\n' "${RESULT[@]}"
+  return 0
 }
 
 main() {
   get_opts "$@" || return 1
   get_playing
-  if [[ "${PRINT_SOCKET}" -eq 1 ]]; then
-    if [[ "${UMPV}" -eq 1 ]] || [[ "${MUSIC}" -eq 1 ]]; then
-      if check_results ; then
-        return 0
-      else
-        return 1
-      fi
-    fi
-  fi
-  check_results -p || return 1
+  check_results || return 1
 }
 
 main "$@" && exit 0 || exit 1

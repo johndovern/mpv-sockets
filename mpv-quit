@@ -2,51 +2,59 @@
 # interactively pick one of the active mpv instances,
 # and send it a 'quit' command
 
-mpv_quit() {
-  mpv-communicate "${1}" 'quit'
-}
-
-if [[ "$#" -gt 0 ]]; then
-  case "${1}" in
+get_opts() {
+  case "$1" in
     -f|--fzf)
       FZF="--fzf"
       ;;
     -l|--latest)
       IFS=$'\n'
       shift
-      if PLAYING=($(mpv-currently-playing --unique --socket)); then
-        mpv_quit "${PLAYING[-1]}"
-        exit
-      else
-        notify-send "No mpv instances which are currently playing media..." >&2
-        exit 1
-      fi
+      while read -r PLAY ; do
+        PLAYING+=("$PLAY")
+      done < <(mpv-currently-playing --unique --socket)
+      [[ "${#PLAYING[@]}" -eq 0 ]] && {
+        notify-send "mpv-quit -l" "No active instances of mpv..."
+        return 1
+      }
+      USE_SOCKET="${PLAYING[-1]}"
       ;;
     -m|--music)
-      mpv_quit "${MPV_MUSIC_SOCKET:-${MPV_SOCKET_DIR:-/tmp/mpvSockets}/music_socket}"
-      exit
+      USE_SOCKET="${MPV_MUSIC_SOCKET:-${MPV_SOCKET_DIR:-/tmp/mpvSockets}/music_socket}"
       ;;
     -u|--umpv)
-      mpv_quit "${MPV_UMPV_SOCKET:-${MPV_SOCKET_DIR:-/tmp/mpvSockets}/umpv_socket}"
-      exit
+      USE_SOCKET="${MPV_UMPV_SOCKET:-${MPV_SOCKET_DIR:-/tmp/mpvSockets}/umpv_socket}"
       ;;
     -s|--socket)
       shift
-      mpv_quit "${1}"
-      exit
-      ;;
-    *)
+      USE_SOCKET="$1"
       ;;
   esac
-fi
+}
 
-set -e
+mpv_quit() {
+  mpv-communicate "$1" 'quit'
+  mpv-track "$1"
+}
 
-declare CHOSEN
-
-if CHOSEN="$(mpv-pick ${FZF})"; then
+mpv_quit_pick() {
+  CHOSEN="$(mpv-pick ${FZF} --quiet)"
+  [[ -z "$CHOSEN" ]] && return 1
   mpv_quit "${CHOSEN}"
-  exit
-else
-  exit 1
-fi
+}
+
+main() {
+  get_opts "$@" || return 1
+  [[ -n "$FZF" ]] && {
+    mpv_quit_pick || return 1
+    return 0
+  }
+  mpv_quit "$USE_SOCKET"
+}
+
+[[ -z "$*" ]] && {
+  mpv_quit_pick || exit 1
+  exit 0
+}
+
+main "$@" && exit 0 || exit 1

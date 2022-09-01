@@ -4,52 +4,62 @@
 IFS=$'\n'
 declare -a PLAYING
 
-# shellcheck disable=SC2207
-if PLAYING=($(mpv-currently-playing --socket)); then
-  while :; do
-    if [[ "$#" -gt 0 ]]; then
-      case "${1}" in
-        -f|--fzf)
-          FZF="--fzf"
-          shift
-          ;;
-        -m|--music)
-          mpv-communicate --music '{ "command": ["playlist-next"] }'
-          exit
-          ;;
-        -p|--pick)
-          mpv-communicate "$(mpv-pick ${FZF})" '{ "command": ["playlist-next"] }'
-          exit
-          ;;
-        -s|--socket)
-          shift
-          case "${1:-NO_SOCKET}" in
-            NO_SOCKET)
-              echo "USAGE: --socket needs a socket"
-              exit 1
-              ;;
-            *)
-              mpv-communicate "${1}" '{ "command": ["playlist-next"] }'
-              shift
-              exit
-              ;;
-          esac
-          ;;
-        -u|--umpv)
-          mpv-communicate --umpv '{ "command": ["playlist-next"] }'
-          exit
-          ;;
-        *)
-          echo "Unrecognized option(s): $@..." >&2
-          exit 1
-          ;;
-      esac
-    else
-      mpv-communicate "${PLAYING[-1]}" '{ "command": ["playlist-next"] }'
-      break
-    fi
-  done
-else
-  echo 'No mpv instances which are currently PLAYING media...' >&2
+abort() {
+  echo 'No active instances of mpv...' >&2
   exit 1
-fi
+}
+
+read -r -d '' -a PLAYING < <(mpv-currently-playing --socket && printf '\0')
+
+[[ "${#PLAYING[@]}" -eq 0 ]] && abort
+
+mpv_next() {
+  mpv-communicate "$1" '{ "command": ["playlist-next"] }'
+  [[ -n "$2" ]] && shift
+  mpv-track "$1"
+}
+
+[[ "$#" -eq 0 ]] && {
+  mpv_next "${PLAYING[-1]}"
+  exit
+}
+
+# shellcheck disable=SC2207
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    -f|--fzf)
+      FZF="--fzf"
+      shift
+      ;;
+    -m|--music)
+      mpv_next --music "${MPV_MUSIC_SOCKET:-${MPV_SOCKET_DIR:-/tmp/mpvSockets}/music_socket}"
+      shift
+      ;;
+    -p|--pick)
+      CHOSEN="$(mpv-pick $FZF --quiet)"
+      [[ -z "$CHOSEN" ]] && {
+        echo "No socket selected..." >&2
+        exit 1
+      }
+      mpv_next "$CHOSEN"
+      shift
+      ;;
+    -s|--socket)
+      shift
+      [[ -z "$1" ]] && {
+        echo "USAGE: --socket needs a socket"
+        exit 1
+      }
+      mpv_next "$1"
+      shift
+      ;;
+    -u|--umpv)
+      mpv_next --umpv "${MPV_UMPV_SOCKET:-${MPV_SOCKET_DIR:-/tmp/mpvSockets}/umpv_socket}"
+      shift
+      ;;
+    *)
+      echo "Unrecognized option(s): $*..." >&2
+      exit 1
+      ;;
+  esac
+done

@@ -1,55 +1,68 @@
 #!/usr/bin/env bash
 # seek forward/backward in the current song
 
-IFS=$'\n'
 declare -a PLAYING
-mpv_seek() {
-  mpv-communicate "${1}" "$(printf '{ "command": ["seek", "%d"] }' "${SEEK_SECONDS}")"
+
+choose_socket() {
+  USE_SOCKET="$(mpv-pick ${FZF})"
 }
 
-# use first argument as number of seconds to skip; default to 5 seconds forwards
-[[ "${1}" =~ [0-9] ]] && SEEK_SECONDS="${1}"
-[[ "${2}" =~ [0-9] ]] && SEEK_SECONDS="${2}"
-[[ -z "${SEEK_SECONDS}" ]] && SEEK_SECONDS=5
+get_opts() {
+  while :; do
+    if [[ "$#" -gt 0 ]]; then
+      case "$1" in
+        -f|--fzf)
+          shift
+          FZF="--fzf"
+          ;;
+        -l|--latest)
+          shift
 
-if [[ "$#" -gt 0 ]]; then
-  case "${1}" in
-    -f|--fzf)
-      FZF="--fzf"
-      shift
-      ;;
-    -l|--latest)
-      IFS=$'\n'
-      shift
-      if PLAYING=($(mpv-currently-playing --unique --socket)); then
-        mpv_seek "${PLAYING[-1]}"
-        exit
-      else
-        notify-send "No mpv instances which are currently playing media..." >&2
-        exit 1
-      fi
-      ;;
-    -m|--music)
-      mpv_seek "${MPV_MUSIC_SOCKET:-${MPV_SOCKET_DIR:-/tmp/mpvSockets}/music_socket}"
-      exit
-      ;;
-    -u|--umpv)
-      mpv_seek "${MPV_UMPV_SOCKET:-${MPV_SOCKET_DIR:-/tmp/mpvSockets}/umpv_socket}"
-      exit
-      ;;
-    -s|--socket)
-      shift
-      mpv_seek "${1}"
-      exit
-      ;;
-  esac
-fi
+          while read -r PLAY; do
+            PLAYING+=("$PLAY")
+          done < <(mpv-currently-playing --unique --socket)
+          if [[ ${#PLAYING[@]} -eq 0 ]] ; then
+            notify-send "No mpv instances which are currently playing media..." >&2
+            return 1
+          fi
+          USE_SOCKET="${PLAYING[-1]}"
+          ;;
+        -m|--music)
+          shift
+          USE_SOCKET="${MPV_MUSIC_SOCKET:-${MPV_SOCKET_DIR:-/tmp/mpvSockets}/music_socket}"
+          ;;
+        -u|--umpv)
+          shift
+          USE_SOCKET="${MPV_UMPV_SOCKET:-${MPV_SOCKET_DIR:-/tmp/mpvSockets}/umpv_socket}"
+          ;;
+        -s|--socket)
+          shift
+          USE_SOCKET="${1}"
+          shift
+          ;;
+        *)
+          [[ "$1" =~ ^[0-9]+$ ]] && SEEK_SECONDS="$1"
+          shift
+          ;;
+      esac
+    else
+      [[ -z "${SEEK_SECONDS}" ]] && SEEK_SECONDS=5
+      break
+    fi
+  done
+}
 
-declare CHOSEN
+mpv_seek() {
+  mpv-communicate "$USE_SOCKET" "$(printf '{ "command": ["seek", "%d"] }' "${SEEK_SECONDS}")"
+  USED_SOCKET="$USE_SOCKET"
+}
 
-if CHOSEN="$(mpv-pick ${FZF})"; then
-  mpv_seek "${CHOSEN}"
-  exit
-else
-  exit 1
-fi
+main() {
+  get_opts "$@" || return 1
+  [[ -z "$USE_SOCKET" ]] && choose_socket
+  [[ -z "$USE_SOCKET" ]] && return 1
+  mpv_seek
+  mpv-track "$USED_SOCKET"
+}
+
+main "$@" && exit 0 || exit 1

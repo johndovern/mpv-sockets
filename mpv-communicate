@@ -3,6 +3,11 @@
 # First argument: mpv socket
 # all other arguments are sent to the socket using socat
 
+abort() {
+  echo "$1" >&2
+  exit 1
+}
+
 case "$1" in
   -u|--umpv)
     SOCKET="${MPV_UMPV_SOCKET:-${MPV_SOCKET_DIR:-/tmp/mpvSockets}/umpv_socket}"
@@ -15,21 +20,13 @@ case "$1" in
     ;;
 esac
 
-if [[ -e "${SOCKET}" ]]; then
-  if [[ ! -S "${SOCKET}" ]]; then
-    echo "Path is not a socket: ${SOCKET}" >&2
-    exit 2
-  fi
-else
-  echo "Path doesn't exist: ${SOCKET}" >&2
-  exit 2
-fi
-readonly SOCKET
 shift # remove socket path
 
-[[ -z "$1" ]] && {
-  echo "Must provide command to pass to socat. See https://github.com/johndovern/mpv-sockets for examples" >&2
-  exit 2
-}
+[[ ! -e "${SOCKET}" ]] && abort "Path doesn't exist: ${SOCKET}"
+[[ ! -S "${SOCKET}" ]] && abort "Path is not a socket: ${SOCKET}"
+
+readonly SOCKET
+
+[[ -z "$1" ]] && abort "Must provide command to pass to socat. See https://github.com/johndovern/mpv-sockets for examples"
 
 exec socat - "$SOCKET" <<<"$@"

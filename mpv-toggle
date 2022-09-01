@@ -6,13 +6,12 @@
 # else, tries to look for another paused
 # mpv instance and resumes that
 
-readonly LAST_PLAYING="/tmp/mpv-recently-paused"
+readonly LAST_PLAYING="/tmp/mpvSockets/mpv-last-used"
 LP_LOCATION="$(readlink "${LAST_PLAYING}")"
 export MOST_RECENT=
-declare -a MANUAL_SOCKET
+declare -a MANUAL_SOCKET CURRENTLY_PLAYING # ALL_SOCKETS
 export MUSIC_SOCKET="${MPV_MUSIC_SOCKET:-${MPV_SOCKET_DIR:-/tmp/mpvSockets}/music_socket}"
 export UMPV_SOCKET="${MPV_UMPV_SOCKET:-${MPV_SOCKET_DIR:-/tmp/mpvSockets}/umpv_socket}"
-declare -a CURRENTLY_PLAYING ALL_SOCKETS
 
 get_opts() {
   while :; do
@@ -47,6 +46,7 @@ get_opts() {
           shift
           ;;
         *)
+          shift
           ;;
       esac
     else
@@ -56,13 +56,13 @@ get_opts() {
 }
 
 manual_toggle() {
-  toggle "${1}" && \
-  rm -f "${LAST_PLAYING}" && \
-  ln -s "${1}" "${LAST_PLAYING}"
+  toggle "$1" && \
+  rm -f "$LAST_PLAYING" && \
+  ln -s "$1" "$LAST_PLAYING"
 }
 
 smart_toggle() {
-  if mpv-currently-playing --socket >/dev/null 2>&1; then
+  if mpv-currently-playing --quiet ; then
     while read -r SOCKET ; do
       CURRENTLY_PLAYING+=("${SOCKET}")
     done < <(mpv-currently-playing --socket)
