@@ -71,7 +71,8 @@ is_active_socket() {
 
 is_ignored() {
   # shellcheck disable=SC2076
-  [[ "$NO_CUSTOM" -eq 1 ]] && [[ "$UMPV_SOCKET|$MUSIC_SOCKET" =~ "$1" ]] && return 0
+  # shellcheck disable=SC2046
+  [[ "$NO_CUSTOM" -eq 1 ]] && [[ "$UMPV_SOCKET|$MUSIC_SOCKET" =~ "$1" ]] && return $(invert_ignore)
   # shellcheck disable=SC2046
   [[ "$NO_UMPV" -eq 1 ]] && [[ "$UMPV_SOCKET" == "$1" ]] && return $(invert_ignore)
   # shellcheck disable=SC2046
