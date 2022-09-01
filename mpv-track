@@ -1,0 +1,24 @@
+#!/bin/bash
+# Script to track a given socket
+
+abort() {
+    echo "Need a valid socket to track" >&2
+    exit 1
+}
+
+[[ "$#" -ne 1 ]] && abort
+[[ ! -S "$1" ]] && abort
+
+TRACK_SOCKET="/tmp/mpvSockets/mpv-last-used"
+ACTUAL_SOCKET="$(readlink "$TRACK_SOCKET")"
+
+[[ "$1" == "$ACTUAL_SOCKET" ]] && exit 0
+
+test_socket() {
+    sleep 0.5
+    [[ ! -S "$1" ]] && exit 0
+    ln -s "$1" "$TRACK_SOCKET"
+}
+
+rm -f "$TRACK_SOCKET"
+test_socket "$1" &
