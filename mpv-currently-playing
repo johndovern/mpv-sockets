@@ -9,123 +9,57 @@
 # Pass the --all flag to print the path for all items, regardless
 # of whether or not they're playing currently
 
-export PRINT_SOCKET=''
-export ALLOW_PAUSED=''
-export UMPV_SOCKET="${MPV_UMPV_SOCKET:-${MPV_SOCKET_DIR:-/tmp/mpvSockets}/umpv_socket}"
-export MUSIC_SOCKET="${MPV_MUSIC_SOCKET:-${MPV_SOCKET_DIR:-/tmp/mpvSockets}/music_socket}"
 declare -a RESULT=()
 cd / || exit 1
 
 get_opts() {
-  while :; do
-    if [[ $# -ge 1 ]]; then
-      case "$1" in
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
       -a|--all)
         ALLOW_PAUSED=1
-        shift
         ;;
       -M|--media-title)
         MEDIA_TITLE=1
-        shift
         ;;
       -m|--music)
-        MUSIC=1
-        shift
+        OPTION="--music --invert"
         ;;
       -q|--quiet)
         QUIET=1
-        shift
         ;;
       -s|--socket)
         PRINT_SOCKET=1
-        shift
         ;;
       -u|--umpv)
-        UMPV=1
-        shift
+        OPTION="--umpv --invert"
         ;;
       -U|--unique)
-        NO_CUSTOM=1
-        shift
+        OPTION="--unique"
         ;;
       *)
         printf 'Unknown option passed: %s\n' "$1" >&2
         return 1
         ;;
-      esac
-    else
-      break
-    fi
+    esac
+    shift
   done
   readonly PRINT_SOCKET ALLOW_PAUSED
 }
 
-is_ignored() {
-  if [[ "${NO_CUSTOM}" -eq 1 ]]; then
-    case "${1}" in
-      "${UMPV_SOCKET}"|"${MUSIC_SOCKET}")
-        return 0
-        ;;
-      *)
-        return 1
-        ;;
-    esac
-  elif [[ "${UMPV}" -eq 1 ]]; then
-    case "${1}" in
-      "${UMPV_SOCKET}")
-        return 1
-        ;;
-      *)
-        return 0
-        ;;
-    esac
-  elif [[ "${MUSIC}" -eq 1 ]]; then
-    case "${1}" in
-      "${MUSIC_SOCKET}")
-        return 1
-        ;;
-      *)
-        return 0
-        ;;
-    esac
-  else
-    return 1
-  fi
-}
-
 get_playing() {
-  for SOCKET in $(mpv-active-sockets); do
+  for SOCKET in $(mpv-active-sockets $OPTION); do
+    [[ "$ALLOW_PAUSED" -ne 1 ]] && {
+      [[ "$(mpv-get-property "$SOCKET" 'pause')" == "true" ]] && continue
+    }
 
-    if [[ "${ALLOW_PAUSED}" -ne 1 ]]; then
-      if [[ "$(mpv-get-property "${SOCKET}" 'pause')" == "true" ]]; then
-        continue
-      fi
-    fi
-
-    if is_ignored "${SOCKET}"; then
+    [[ "$PRINT_SOCKET" -eq 1 ]] && { RESULT+=("$SOCKET"); continue; }
+    [[ "$MEDIA_TITLE" -eq 1 ]] && {
+      RESULT+=("$(mpv-get-property "$SOCKET" 'media-title')")
       continue
-    fi
-
-    if [[ "${PRINT_SOCKET}" -eq 1 ]]; then # if user asked for socket, just print the socket
-        RESULT+=("${SOCKET}")
-    elif [[ "${MEDIA_TITLE}" -eq 1 ]]; then
-      RESULT+=("$(mpv-get-property "${SOCKET}" 'media-title')")
-    else # else, try to get the full song path
-      if REL_SONG_PATH="$(mpv-get-property "${SOCKET}" 'path' 2>/dev/null)"; then
-        # if the path doesnt correspond to its absolute path, or this doesnt
-        # exist, try prepending the working directory
-        if [[ -z "${REL_SONG_PATH}" ]] && [[ ! -e "${REL_SONG_PATH}" ]]; then
-          FULL_SONG_PATH="$(mpv-get-property "${SOCKET}" 'working-directory')/${REL_SONG_PATH}"
-        fi
-        if [[ -n "${FULL_SONG_PATH}" ]] && [[ -e "${FULL_SONG_PATH}" ]]; then
-          # prints the absolute path, if it exists
-          RESULT+=("${FULL_SONG_PATH}")
-        else
-          # relative song path, typically a URL?
-          RESULT+=("${REL_SONG_PATH}")
-        fi
-      fi
-    fi
+    }
+    REL_SONG_PATH="$(mpv-get-property "$SOCKET" 'path' 2>/dev/null)"
+    FULL_SONG_PATH="$(mpv-get-property "$SOCKET" 'working-directory' 2>/dev/null)/$REL_SONG_PATH"
+    [[ -f "$FULL_SONG_PATH" ]] && RESULT+=("$FULL_SONG_PATH") || RESULT+=("$REL_SONG_PATH")
   done
 }
 

@@ -3,120 +3,86 @@
 # Exits unsuccessfully if no sockets are active
 declare -a ACTIVE_SOCKETS
 export SOCKET_DIR="${MPV_SOCKET_DIR:-/tmp/mpvSockets}"
-export UMPV_SOCKET="${MPV_UMPV_SOCKET:-${MPV_SOCKET_DIR:-/tmp/mpvSockets}/umpv_socket}"
-export MUSIC_SOCKET="${MPV_MUSIC_SOCKET:-${MPV_SOCKET_DIR:-/tmp/mpvSockets}/music_socket}"
+export UMPV_SOCKET="${MPV_UMPV_SOCKET:-$SOCKET_DIR/umpv_socket}"
+export MUSIC_SOCKET="${MPV_MUSIC_SOCKET:-$SOCKET_DIR/music_socket}"
 
 find_active_sockets() {
   while read -r SOCKET; do
-    if is_ignored "${SOCKET}" ; then
-      continue
-    fi
-    if is_active_socket "${SOCKET}"; then
-      ACTIVE_SOCKETS+=("${SOCKET}")
-    fi
-  done < <(find "${SOCKET_DIR}" -type s -printf '%p\n')
+    is_ignored "$SOCKET" && continue
+    is_active_socket "$SOCKET" && ACTIVE_SOCKETS+=("$SOCKET")
+  done < <(find "$SOCKET_DIR" -type s -printf '%p\n')
 
-  if [[ "${#ACTIVE_SOCKETS[@]}" -eq 0 ]]; then
-    return 1
-  fi
+  [[ "${#ACTIVE_SOCKETS[@]}" -eq 0 ]] && return 1
 
   printf '%s\n' "${ACTIVE_SOCKETS[@]}" | sort -n
 }
 
 get_opts() {
-  while :; do
-    if [[ $# -gt 0 ]]; then
-      case "${1:-NO_OPTION}" in
-        -h|--help)
-          usage
-          return 1
-          break
-          ;;
-        -m|--music)
-          NO_MUSIC=1
-          shift
-          break
-          ;;
-        -s|--socket)
-          shift
-          case "${1:-NO_SOCKET}" in
-            NO_SOCKET)
-              usage >&2
-              exit 1
-              ;;
-            *)
-              CHECK="${1}"
-              shift
-              ;;
-          esac
-          break
-          ;;
-        -u|--umpv)
-          NO_UMPV=1
-          shift
-          break
-          ;;
-        -U|--unique)
-          NO_CUSTOM=1
-          shift
-          break
-          ;;
-        *)
-        notify-send "Unknown option passed: $1" >&2
-        exit 1
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help)
+        usage
+        return 1
         ;;
-      esac
-    else
-      break
-    fi
+      -i|--invert)
+        INVERT=1
+        ;;
+      -m|--music)
+        NO_MUSIC=1
+        ;;
+      -s|--socket)
+        shift
+        [[ -z "$1" ]] && {
+          usage >&2
+          return 1
+        }
+        CHECK="$1"
+        ;;
+      -u|--umpv)
+        NO_UMPV=1
+        ;;
+      -U|--unique)
+        NO_CUSTOM=1
+        ;;
+      *)
+        notify-send "Unknown option passed: $1" >&2
+        return 1
+        ;;
+    esac
+    shift
   done
 }
 
+invert_default() {
+  [[ "$INVERT" -eq 1 ]] && return 0
+  return 1
+}
+
+invert_ignore() {
+  [[ "$INVERT" -eq 1 ]] && return 1
+  return 0
+}
+
 is_active_socket() {
-  if socat - "${1}" <<<'{ "command": ["get_property", "path"] }' >/dev/null 2>&1; then
-    return 0
-  else
-    rm "${1}" >&2
-    return 1
-  fi
+  socat - "$1" <<<'{ "command": ["get_property", "path"] }' >/dev/null 2>&1 && return 0
+  rm "$1" >&2
+  return 1
 }
 
 is_ignored() {
-  if [[ "${NO_CUSTOM}" -eq 1 ]]; then
-    case "${1}" in
-      "${UMPV_SOCKET}"|"${MUSIC_SOCKET}")
-        return 0
-        ;;
-      *)
-        return 1
-        ;;
-    esac
-  elif [[ "${NO_UMPV}" -eq 1 ]]; then
-    case "${1}" in
-      "${UMPV_SOCKET}")
-        return 0
-        ;;
-      *)
-        return 1
-        ;;
-    esac
-  elif [[ "${NO_MUSIC}" -eq 1 ]]; then
-    case "${1}" in
-      "${MUSIC_SOCKET}")
-        return 0
-        ;;
-      *)
-        return 1
-        ;;
-    esac
-  else
-    return 1
-  fi
+  # shellcheck disable=SC2076
+  [[ "$NO_CUSTOM" -eq 1 ]] && [[ "$UMPV_SOCKET|$MUSIC_SOCKET" =~ "$1" ]] && return 0
+  # shellcheck disable=SC2046
+  [[ "$NO_UMPV" -eq 1 ]] && [[ "$UMPV_SOCKET" == "$1" ]] && return $(invert_ignore)
+  # shellcheck disable=SC2046
+  [[ "$NO_MUSIC" -eq 1 ]] && [[ "$MUSIC_SOCKET" == "$1" ]] && return $(invert_ignore)
+  # shellcheck disable=SC2046
+  return $(invert_default)
 }
 
 test_given_socket() {
-  [[ ! -S "${CHECK}" ]] && return 1
-  is_active_socket "${CHECK}" && return 0 || return 1
+  [[ ! -S "$CHECK" ]] && return 1
+  is_active_socket "$CHECK" && return 0 || return 1
 }
 
 usage() {
@@ -126,7 +92,7 @@ usage() {
   Options:
     -h, --help            Show this help message and exit.
     -m, --music           List all sockets but mpv-music's socket.
-                          mpv-music's socket is set by \${MPV_MUSIC_SOCKET}
+                          mpv-music's socket is set by \$MPV_MUSIC_SOCKET
                           if set or
                           /tmp/mpvSockets/music_socket
                           if unset.
@@ -135,7 +101,7 @@ usage() {
     -u, --unique          List only unique instances of mpv.
                           no umpv or music sockets.
     -U, --umpv            List all sockets but umpv's socket.
-                          umpv socket is set by \${MPV_UMPV_SOCKET}
+                          umpv socket is set by \$MPV_UMPV_SOCKET
                           if set or
                           /tmp/mpvSockets/umpv_socket
                           if unset.
@@ -144,8 +110,7 @@ EOF
 
 main() {
   get_opts "$@" || return 1
-  [[ -n "${CHECK}" ]] && { test_given_socket && return 0 || return 1 ;}
-  ACTIVE_SOCKETS=()
+  [[ -n "$CHECK" ]] && { test_given_socket ; return $? ;}
   find_active_sockets || return 1
 }
 
